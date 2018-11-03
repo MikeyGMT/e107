@@ -261,73 +261,6 @@ $e107 = e107::getInstance()->initCore($e107_paths, e_ROOT, $sql_info, varset($E1
 
 e107::getSingleton('eIPHandler');			// This auto-handles bans etc
 
-
-### NEW Register Autoload - do it asap
-if(!function_exists('spl_autoload_register'))
-{
-	// PHP >= 5.1.2 required
-	die('Fatal exception - spl_autoload_* required.');
-}
-
-
-// allow disable of autoloading - may be removed as e107::autoload_register() is flexible enough
-if(!defset('E107_DISABLE_AUTOLOAD', false))
-{
-	/**
-	 * Generic autoloader. (didn't work while in e107_class.php) 
-	 * @example if your plugin calls 'use Xxxxx\Yyyyy\Zzzzz;' it will attempt to load: ./vendor/Xxxxx/Yyyyy/Zzzzz.php
-	 */
-	function autoloadPsr0($className)
-	{
-		$className = str_replace("_", "\\", $className);
-		$className = ltrim($className, '\\');
-		$fileName = '';
-		$namespace = '';
-		
-		if ($lastNsPos = strripos($className, '\\'))
-		{
-			$namespace = substr($className, 0, $lastNsPos);
-			$className = substr($className, $lastNsPos + 1);
-			$fileName = str_replace('\\', DIRECTORY_SEPARATOR, $namespace) . DIRECTORY_SEPARATOR;
-		}
-		
-		$fileName .= str_replace('_', DIRECTORY_SEPARATOR, $className) . '.php';
-		
-		$fullPath = 'vendor'. DIRECTORY_SEPARATOR . $fileName;
-		
-		if(file_exists($fullPath))
-		{
-			e107_require_once($fullPath);	
-		}
-		else
-		{
-			return false;	
-		} 
-		
-	}
-
-	e107::autoload_register(array('e107', 'autoload'));
-//	e107::autoload_register('autoloadPsr0');  // Generic 'use xxxx\yyyy\zzzz;' fix/solution for plugin developers. 
-	
-}
-
-	function genericAutoload($className)
-	    {
-	        $className = str_replace("_", "\\", $className);
-	        $className = ltrim($className, '\\');
-	        $fileName = '';
-	        $namespace = '';
-	        if ($lastNsPos = strripos($className, '\\'))
-	        {
-	            $namespace = substr($className, 0, $lastNsPos);
-	            $className = substr($className, $lastNsPos + 1);
-	            $fileName = str_replace('\\', DIRECTORY_SEPARATOR, $namespace) . DIRECTORY_SEPARATOR;
-	        }
-	        $fileName .= str_replace('_', DIRECTORY_SEPARATOR, $className) . '.php';
-	
-	        e107_require_once($fileName);
-	    }
-
 /**
  * NEW - system security levels
  * Could be overridden by e107_config.php OR $CLASS2_INCLUDE script (if not set earlier)
@@ -369,6 +302,7 @@ if(!defined('e_SECURITY_LEVEL'))
 //$e107->url = e107::getUrl(); - caught by __get()
 //TODO - find & replace $e107->url
 //DEPRECATED, BC, $e107->tp caught by __get()
+/** @var e_parse $tp */
 $tp = e107::getParser(); //TODO - find & replace $tp, $e107->tp
 
 //define("e_QUERY", $matches[2]);
@@ -431,6 +365,7 @@ e107::getSingleton('e107_traffic'); // We start traffic counting ASAP
 // e107_require_once(e_HANDLER.'mysql_class.php');
 
 //DEPRECATED, BC, $e107->sql caught by __get()
+/** @var e_db_mysql $sql */
 $sql = e107::getDb(); //TODO - find & replace $sql, $e107->sql
 $sql->db_SetErrorReporting(false);
 
@@ -719,7 +654,7 @@ if(isset($pref['lan_global_list']))
 
 $sql->db_Mark_Time('CHAP challenge');
 
-$die = (e_AJAX_REQUEST == true) ? false : true; 
+$die = (e_AJAX_REQUEST == true) ? false : true;
 e107::getSession()
 	->challenge() // Make sure there is a unique challenge string for CHAP login
 	->check($die); // Token protection
@@ -1982,8 +1917,7 @@ e107::getDebug()->log("Timezone: ".USERTIMEZONE); // remove later on.
 		define('GUEST', false);
 		define('USERCLASS', '');
 		define('USEREMAIL', '');
-		define('USERCLASS_LIST', '');
-		define('USERCLASS', '');
+		define('USERCLASS_LIST', '253,254,250,251,0'); // needed to run some queries.
 		define('USERJOINED', '');
 		return;
 	}
@@ -2794,8 +2728,10 @@ class e_http_header
 			$this->setHeader('Vary: Accept');
 		}
 
-
-		$this->setHeader('X-Frame-Options: SAMEORIGIN');
+		if(defset('X-FRAME-SAMEORIGIN') !== false)
+		{
+			$this->setHeader('X-Frame-Options: SAMEORIGIN');
+		}
 
 		// should come after the Etag header
 		if ($canCache && isset($_SERVER['HTTP_IF_NONE_MATCH']))

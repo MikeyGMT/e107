@@ -194,11 +194,6 @@ class e_db_mysql
 				list($this->mySQLserver,$this->mySQLport) = explode(':',$mySQLserver,2);
 			}
 
-		//	if($this->mySQLserver === 'localhost') // problematic.
-			{
-		//		$this->mySQLserver = '127.0.0.1';  // faster by almost 1 second
-			}
-
 			try
 			{
 				$this->mySQLaccess = new PDO("mysql:host=".$this->mySQLserver."; port=".$this->mySQLport, $this->mySQLuser, $this->mySQLpassword, array(PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION));
@@ -371,7 +366,7 @@ class e_db_mysql
 
 			try
 			{
-				$this->mySQLaccess->query("use ".$database);
+				$this->mySQLaccess->query("use `".$database."`");
         		// $this->mySQLaccess->select_db($database); $dbh->query("use newdatabase");
 		    }
 			catch (PDOException $e) 
@@ -483,11 +478,7 @@ class e_db_mysql
 			$this->db_Write_log($log_type, $log_remark, $query);
 		}
 
-		if(!$this->mySQLaccess)
-		{
-			global $db_ConnectionID;
-        	$this->mySQLaccess = $db_ConnectionID;
-		}
+		$this->provide_mySQLaccess();
 
 		$b = microtime();
 		
@@ -675,7 +666,7 @@ class e_db_mysql
 	 * @param boolean $multi if true, fetch all (multi mode)
 	 * @param string $indexField field name to be used for indexing when in multi mode
 	 * @param boolean $debug
-	 * @return array
+	 * @return string|array
 	 */
 	public function retrieve($table, $fields = null, $where=null, $multi = false, $indexField = null, $debug = false)
 	{
@@ -978,11 +969,7 @@ class e_db_mysql
 			$query = 'INSERT INTO '.$this->mySQLPrefix."{$table} VALUES ({$arg})";
 		}
 
-		if(!$this->mySQLaccess)
-		{
-			global $db_ConnectionID;
-			$this->mySQLaccess = $db_ConnectionID;
-		}
+		$this->provide_mySQLaccess();
 
 		$this->mySQLresult = $this->db_Query($query, NULL, 'db_Insert', $debug, $log_type, $log_remark);
 
@@ -1197,11 +1184,7 @@ class e_db_mysql
 		$table = $this->db_IsLang($tableName);
 		$this->mySQLcurTable = $table;
 
-		if(!$this->mySQLaccess)
-		{
-			global $db_ConnectionID;
-			$this->mySQLaccess = $db_ConnectionID;
-		}
+		$this->provide_mySQLaccess();
 
 		$arg = $this->_prepareUpdateArg($tableName, $arg);
 
@@ -1459,11 +1442,7 @@ class e_db_mysql
 	  $table = $this->db_IsLang($table);
 	  $this->mySQLcurTable = $table;
 
-	  if(!$this->mySQLaccess)
-	  {
-		global $db_ConnectionID;
-        $this->mySQLaccess = $db_ConnectionID;
-	  }
+		$this->provide_mySQLaccess();
 
 	  $new_data = '';
 	  if (is_array($vars))
@@ -1484,7 +1463,8 @@ class e_db_mysql
 	  }
 	  else
 	  {
-		$this->dbError("db_Update ($query)");
+	    $query = 'UPDATE '.$this->mySQLPrefix.$table.' SET '.$new_data.$vars.' '.$arg;
+		$this->dbError("Error in deprecated db_UpdateArray method query:($query)");
 		return FALSE;
 	  }
 	}
@@ -1665,11 +1645,7 @@ class e_db_mysql
 	 */
 	function close()
 	{
-		if(!$this->mySQLaccess)
-		{
-			global $db_ConnectionID;
-			$this->mySQLaccess = $db_ConnectionID;
-		}
+		$this->provide_mySQLaccess();
 		e107::getSingleton('e107_traffic')->BumpWho('db Close', 1);
 		$this->mySQLaccess = NULL; // correct way to do it when using shared links.
 		$this->dbError('dbClose');
@@ -1701,11 +1677,7 @@ class e_db_mysql
 		$table = $this->db_IsLang($table);
 		$this->mySQLcurTable = $table;
 
-		if(!$this->mySQLaccess)
-		{
-			global $db_ConnectionID;
-        	$this->mySQLaccess = $db_ConnectionID;
-		}
+		$this->provide_mySQLaccess();
 
 
 		if (!$arg)
@@ -1907,11 +1879,7 @@ class e_db_mysql
 		  	return $table;
 		}
 
-		if(!$this->mySQLaccess)
-		{
-			global $db_ConnectionID;
-        	$this->mySQLaccess = $db_ConnectionID;
-		}
+		$this->provide_mySQLaccess();
 
 		if($multiple == FALSE)
 		{
@@ -2249,11 +2217,7 @@ class e_db_mysql
 			$this->mySQLdefaultdb = $mySQLdefaultdb;
 		}
 
-		if(!$this->mySQLaccess)
-		{
-			global $db_ConnectionID;
-			$this->mySQLaccess = $db_ConnectionID;
-		}
+		$this->provide_mySQLaccess();
 
 		if ($prefix == '') $prefix = $this->mySQLPrefix;
 
@@ -2321,11 +2285,7 @@ class e_db_mysql
 		$convert = array("PRIMARY"=>"PRI","INDEX"=>"MUL","UNIQUE"=>"UNI");
 		$key = (isset($convert[$key])) ? $convert[$key] : "OFF";
 
-		if(!$this->mySQLaccess)
-		{
-			global $db_ConnectionID;
-			$this->mySQLaccess = $db_ConnectionID;
-		}
+		$this->provide_mySQLaccess();
 
         $result = $this->gen("SHOW COLUMNS FROM ".$this->mySQLPrefix.$table);
         if ($result && ($this->rowCount() > 0))
@@ -2373,11 +2333,7 @@ class e_db_mysql
 			$this->mySQLdefaultdb = $mySQLdefaultdb;
 		}
 
-		if(!$this->mySQLaccess)
-		{
-			global $db_ConnectionID;
-			$this->mySQLaccess = $db_ConnectionID;
-		}
+		$this->provide_mySQLaccess();
 
 		if (!empty($fields) && !is_array($fields))
 		{
@@ -2441,11 +2397,7 @@ class e_db_mysql
 			$data = strip_if_magic($data);
 		}
 
-		if(!$this->mySQLaccess)
-		{
-			global $db_ConnectionID;
-        	$this->mySQLaccess = $db_ConnectionID;
-		}
+		$this->provide_mySQLaccess();
 		
 		if($this->pdo)
 		{
@@ -3141,10 +3093,38 @@ class e_db_mysql
 
 	}
 
+	/**
+	 * In case e_db_mysql::$mySQLaccess is not set, set it.
+	 *
+	 * Uses the global variable $db_ConnectionID if available.
+	 *
+	 * When the global variable has been unset like in https://github.com/e107inc/e107-test/issues/6 ,
+	 * use the "mySQLaccess" from the default e_db_mysql instance singleton.
+	 */
+	private function provide_mySQLaccess()
+	{
+		if (!$this->mySQLaccess) {
+			global $db_ConnectionID;
+			$this->mySQLaccess = $db_ConnectionID;
+		}
+		if (!$this->mySQLaccess) {
+			$this->mySQLaccess = e107::getDb()->get_mySQLaccess();
+		}
+	}
+
+	/**
+	 * @deprecated 2.1.9 Used only to provide $mySQLaccess to other instances of e_db_mysql scattered around
+	 * @return PDO
+	 */
+	public function get_mySQLaccess()
+	{
+		return $this->mySQLaccess;
+	}
+
 }
 
 /**
- * BC
+ * Backwards compatibility
  */
 class db extends e_db_mysql
 {

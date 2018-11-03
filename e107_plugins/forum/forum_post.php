@@ -66,8 +66,9 @@ class forum_post_handler
 		$this->id       = (int) $_GET['id']; // forum thread/topic id.
 		$this->post     = (int) $_GET['post']; // post ID if needed.
 
-		define('MODERATOR', USER && $this->forumObj->isModerator(USERID));
 
+		$moderatorUserIds = $forum->getModeratorUserIdsByPostId($this->post);
+		define('MODERATOR', (USER && in_array(USERID, $moderatorUserIds)));
 
 
 		$this->data = $this->processGet();
@@ -155,6 +156,7 @@ class forum_post_handler
 				$forumInfo              = $this->forumObj->forumGet($postInfo['post_forum']);
 				$data                   = array_merge($postInfo ,$forumInfo);
 				$data['action']         = $this->action;
+				$data['initial_post']   = $this->forumObj->threadDetermineInitialPost($this->post);
 				$this->setPageTitle($data);
 				return $data;
 				break;
@@ -309,10 +311,13 @@ class forum_post_handler
 
 		$link = "{e_PLUGIN}forum/forum_admin.php?mode=post&action=list&id=".intval($result);
 
+
 		$report = LAN_FORUM_2018." ".SITENAME." : ".$link . "\n
 					".LAN_FORUM_2019.": ".USERNAME. "\n" . $report_add;
-		$subject = LAN_FORUM_2020." ". SITENAME;
-		e107::getNotify()->send('forum_post_rep', $subject, $report);
+		//$subject = LAN_FORUM_2020." ". SITENAME;
+
+		//e107::getNotify()->send('forum_post_rep', $subject, $report);
+		e107::getEvent()->trigger('user_forum_post_report', $report);
 		e107::getRender()->tablerender(LAN_FORUM_2023, $text, 'forum-post-report');
 	}
 
@@ -1022,6 +1027,11 @@ class forum_post_handler
 		$postdate = e107::getDate()->convert_date(time(), "forum");
 		$tsubject = $tp->post_toHTML($_POST['subject'], true);
 		$tpost = $tp->post_toHTML($_POST['post'], true);
+
+		if (empty($tsubject))
+		{
+			$tsubject = $this->data['thread_name'];
+		}
 
 		if ($_POST['poll_title'] != '' && check_class($this->forumObj->prefs->get('poll')))
 		{

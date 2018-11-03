@@ -896,12 +896,12 @@ class lancheck
 
 		$feed = 'https://e107.org/languagepacks.xml';
 
-		if(!empty(e_VERSION))
+		$version = e_VERSION;
+
+		if(!empty($version))
 		{
 			$feed .= "?ver=". preg_replace('/[^\d\.]/','',e_VERSION);
 		}
-
-
 
 		$languages = array();
 
@@ -913,11 +913,30 @@ class lancheck
 				return false;
 			}
 
-			foreach($rawData['language'] as $val)
+			foreach($rawData['language'] as $key => $att)
 			{
-				$att = $val['@attributes'];
+				// issue #3059 in case array @attributes is in $att
+				if (is_int($key) && is_array($att) && array_key_exists('@attributes', $att))
+				{
+					$att = $att['@attributes'];
+				}
+				// issue #3059 Language list didn't load
+				elseif ($key != '@attributes')
+				{
+					continue;
+				}
 
 				$id = $att['name'];
+
+				// fix github double url bug...
+				if (stripos($att['url'], 'https://github.comhttps://github.com') !== false)
+				{
+					$att['url'] = str_ireplace('https://github.comhttps://github.com', 'https://github.com', $att['url']);
+				}
+				if (stripos($att['infourl'], 'https://github.comhttps://github.com') !== false)
+				{
+					$att['infourl'] = str_ireplace('https://github.comhttps://github.com', 'https://github.com', $att['infourl']);
+				}
 
 				$languages[$id] = array(
 					'name'          => $att['name'],
@@ -1830,7 +1849,7 @@ class lancheck
 			<td style='width:40%;vertical-align:top'>".htmlentities(str_replace("ndef++","",$trans['orig'][$sk])) ."</td>";
 			$text .= "<td class='forumheader3' style='width:50%;vertical-align:top'>";
 			$text .= ($writable) ? "<textarea  class='input-xxlarge' name='newlang[]' rows='$rowamount' cols='45' style='height:100%'>" : "";
-			$text .= str_replace("ndef++","",$trans['tran'][$sk]);
+			$text .= htmlentities(str_replace("ndef++","",$trans['tran'][$sk]));
 			$text .= ($writable) ? "</textarea>" : "";
 			//echo "orig --> ".$trans['orig'][$sk]."<br />";
 			if (strpos($trans['orig'][$sk],"ndef++") !== False)

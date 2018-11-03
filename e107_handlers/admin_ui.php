@@ -2777,7 +2777,7 @@ class e_admin_controller_ui extends e_admin_controller
 
 	/**
 	 *
-	 * @param string $field
+	 * @param string|array $field
 	 * @param string $key attribute name
 	 * @param mixed $value default value if not set, default is null
 	 * @return e_admin_controller_ui
@@ -3471,7 +3471,8 @@ class e_admin_controller_ui extends e_admin_controller
 				//something like handleListUrlTypeBatch(); for custom handling of 'url_type' field name
 				$method = 'handle'.$actionName.$this->getRequest()->camelize($field).'Batch';
 
-				e107::getDebug()->log("Checking for batch method: ".$method);
+				e107::getMessage()->addDebug("Searching for custom batch method: ".$method."(".$selected.",".$value.")");
+
 				if(method_exists($this, $method)) // callback handling
 				{
 					$this->$method($selected, $value);
@@ -3506,7 +3507,7 @@ class e_admin_controller_ui extends e_admin_controller
 		{
 			return array();
 		}
-		$filter = $tp->toDB(explode('__', $filter_value));
+		$filter = (array) $tp->toDB(explode('__', $filter_value));
 		$res = array();
 		switch($filter[0])
 		{
@@ -3542,12 +3543,17 @@ class e_admin_controller_ui extends e_admin_controller
 			default:
 				//something like handleListUrlTypeFilter(); for custom handling of 'url_type' field name filters
 				$method = 'handle'.$this->getRequest()->getActionName().$this->getRequest()->camelize($filter[0]).'Filter';
+				$args = array_slice($filter, 1);
+
+				e107::getMessage()->addDebug("Searching for custom filter method: ".$method."(".implode(', ', $args).")");
+
+
 				if(method_exists($this, $method)) // callback handling
 				{
 					//return $this->$method($filter[1], $selected); selected?
 					// better approach - pass all values as method arguments
 					// NOTE - callbacks are allowed to return QUERY as a string, it'll be added in the WHERE clause
-					$args = array_slice($filter, 1);
+
 					e107::getMessage()->addDebug('Executing filter callback <strong>'.get_class($this).'::'.$method.'('.implode(', ', $args).')</strong>');
 
 					return call_user_func_array(array($this, $method), $args);
@@ -3934,7 +3940,7 @@ class e_admin_controller_ui extends e_admin_controller
 			$keys = array();
 			foreach($matches[1] AS $k=>$v)
 			{
-				if(varset($matches[3][$k]))
+				if(varset($matches[3][$k]) && !array_key_exists($v, $this->joinAlias))
 				{
 					$this->joinAlias[$v] = $matches[3][$k]; // array. eg $this->joinAlias['core_media'] = 'm';
 				}
@@ -3996,6 +4002,29 @@ class e_admin_controller_ui extends e_admin_controller
 		return $qry; 
 	}
 
+	/**
+	 * Fix search string by replacing the commonly used '*' wildcard
+	 * with the mysql represenation of it '%' and '?' with '_' (single character)
+	 *
+	 * @param string $search
+	 * @return string
+	 */
+	protected function fixSearchWildcards($search)
+	{
+		$search = trim($search);
+		if (empty($search))
+		{
+			return '';
+		}
+
+		// strip wildcard on the beginning and the end
+		while (substr($search, 0, 1) == '*') $search = substr($search, 1);
+		while (substr($search, -1) == '*') $search = substr($search, 0, -1);
+
+		// replace "*" wildcard with mysql wildcard "%"
+		return str_replace(array('*', '?'), array('%', '_'), $search);
+	}
+
 
 	// TODO - abstract, array return type, move to parent?
 	protected function _modifyListQry($raw = false, $isfilter = false, $forceFrom = false, $forceTo = false, $listQry = '')
@@ -4011,7 +4040,7 @@ class e_admin_controller_ui extends e_admin_controller
 		$filter = array();
 
 
-		$searchQuery = $tp->toDB($request->getQuery('searchquery', ''));
+		$searchQuery = $this->fixSearchWildcards($tp->toDB($request->getQuery('searchquery', '')));
 		$searchFilter = $this->_parseFilterRequest($request->getQuery('filter_options', ''));
 		
 		if(E107_DEBUG_LEVEL == E107_DBG_SQLQUERIES)
@@ -4314,6 +4343,11 @@ class e_admin_controller_ui extends e_admin_controller
 			// add more where details on the fly via $this->listQrySql['db_where'];
 			$qry .= (strripos($qry, 'where')==FALSE) ? " WHERE " : " AND "; // Allow 'where' in custom listqry
 			$qry .= implode(" AND ", $searchQry);
+
+			// Disable tree (use flat list instead) when filters are applied
+			// Implemented out of necessity under https://github.com/e107inc/e107/issues/3204
+			// Horrible hack, but only needs this one line of additional code
+			$this->getTreeModel()->setParam('sort_parent', null);
 		}
 
 		// GROUP BY if needed
@@ -5171,7 +5205,7 @@ class e_admin_ui extends e_admin_controller_ui
 	 */
 	protected function handleListBoolBatch($selected, $field, $value)
 	{
-		$cnt = $this->getTreeModel()->update($field, $value, $selected, $value, false);
+		$cnt = $this->getTreeModel()->batchUpdate($field, $value, $selected, $value, false);
 		if($cnt)
 		{
 			$caption = e107::getParser()->lanVars(LAN_UI_BATCH_BOOL_SUCCESS, $cnt, true);
@@ -5188,7 +5222,7 @@ class e_admin_ui extends e_admin_controller_ui
 	protected function handleListBoolreverseBatch($selected, $field, $value)
 	{
 		$tree = $this->getTreeModel();
-		$cnt = $tree->update($field, "1-{$field}", $selected, null, false);
+		$cnt = $tree->batchUpdate($field, "1-{$field}", $selected, null, false);
 		if($cnt)
 		{
 			$caption = e107::getParser()->lanVars(LAN_UI_BATCH_REVERSED_SUCCESS, $cnt, true);
@@ -5258,7 +5292,7 @@ class e_admin_ui extends e_admin_controller_ui
 						$value = implode(',', array_map('trim', $value));
 					}
 					
-					$cnt = $this->getTreeModel()->update($field, $value, $selected, true, true);
+					$cnt = $this->getTreeModel()->batchUpdate($field, $value, $selected, true, true);
 				}
 				else
 				{
@@ -5271,7 +5305,7 @@ class e_admin_ui extends e_admin_controller_ui
 				$allowed = !is_array($value) ? explode(',', $value) : $value;
 				if(!$allowed)
 				{
-					$rcnt = $this->getTreeModel()->update($field, '', $selected, '', true);
+					$rcnt = $this->getTreeModel()->batchUpdate($field, '', $selected, '', true);
 				}
 				else
 				{
@@ -5359,7 +5393,7 @@ class e_admin_ui extends e_admin_controller_ui
 
 
 
-		$cnt = $this->getTreeModel()->update($field, $val, $selected, true, false);
+		$cnt = $this->getTreeModel()->batchUpdate($field, $val, $selected, true, false);
 		if($cnt)
 		{
 			$vttl = $this->getUI()->renderValue($field, $value, $this->getFieldAttr($field));
@@ -5542,24 +5576,32 @@ class e_admin_ui extends e_admin_controller_ui
 		
 		$_name = $_POST['name'];
 		$_value = $_POST['value'];
+		$_token = $_POST['token'];
+
 		$parms = $this->fields[$_name]['readParms'] ? $this->fields[$_name]['readParms'] : '';
 		if(!is_array($parms)) parse_str($parms, $parms);
-		if(vartrue($parms['editable'])) $this->fields[$_name]['inline'] = true;
+		if(!empty($parms['editable'])) $this->fields[$_name]['inline'] = true;
 		
-		if(vartrue($this->fields[$_name]['noedit']) || vartrue($this->fields[$_name]['nolist']) || !vartrue($this->fields[$_name]['inline']))
+		if(!empty($this->fields[$_name]['noedit']) || !empty($this->fields[$_name]['nolist']) || empty($this->fields[$_name]['inline']) || empty($_token) || !password_verify(session_id(),$_token))
 		{
 			header($protocol.': 403 Forbidden', true, 403);
 			header("Status: 403 Forbidden", true, 403);
 			echo ADLAN_86; //Forbidden
-			$this->logajax("Forbidden");
+
+			$result = var_export($this->fields[$_name], true);
+			$this->logajax("Forbidden\nAction:".$this->getAction()."\nField:\n".$result);
 			return;
 		}
-		
+
+
+
 
 		
 		$model = $this->getModel()->load($this->getId());
 		$_POST = array(); //reset post
 		$_POST[$_name] = $_value; // set current field only
+
+	//	print_r($_POST);
 		
 		// generic handler - same as regular edit form submit
 
@@ -5605,6 +5647,7 @@ class e_admin_ui extends e_admin_controller_ui
 		$message .= print_r($_POST,true);
 		$message .= "\n_GET\n";
 		$message .= print_r($_GET,true);
+
 		$message .= "---------------";
 		
 		file_put_contents(e_LOG.'uiAjaxResponseInline.log', $message."\n\n", FILE_APPEND);
@@ -5904,8 +5947,17 @@ class e_admin_ui extends e_admin_controller_ui
 	}
 
 	/**
- * User defined error handling, return true to suppress model messages
- */
+	 * User defined before pref saving logic
+	 * @param $new_data
+	 * @param $old_data
+	 */
+	public function beforePrefsSave($new_data, $old_data)
+	{
+	}
+
+	/**
+    * User defined error handling, return true to suppress model messages
+    */
 	public function onUpdateError($new_data, $old_data, $id)
 	{
 	}
@@ -5963,6 +6015,16 @@ class e_admin_ui extends e_admin_controller_ui
 	public function PrefsSaveTrigger()
 	{
 		$data = $this->getPosted();
+
+		$beforePref = $data;
+		unset($beforePref['e-token'],$beforePref['etrigger_save']);
+
+		$tmp = $this->beforePrefsSave($beforePref, $this->getConfig()->getPref());
+
+		if(!empty($tmp))
+		{
+			$data = $tmp;
+		}
 
 		foreach($this->prefs as $k=>$v) // fix for empty checkboxes - need to save a value.
 		{
@@ -6654,13 +6716,14 @@ class e_admin_form_ui extends e_form
 			'table_rows' => '', // rows array (<td> tags)
 			'table_body' => '', // string body - used only if rows empty
 			'pre_triggers' => '',
-			'triggers' => array('hidden' => $this->hidden('etrigger_delete['.$ids.']', $ids), 'delete_confirm' => array(LAN_CONFDELETE, 'confirm', $ids), 'cancel' => array(LAN_CANCEL, 'cancel')),
+			'triggers' => array('hidden' => $this->hidden('etrigger_delete['.$ids.']', $ids) . $this->token(), 'delete_confirm' => array(LAN_CONFDELETE, 'confirm', $ids), 'cancel' => array(LAN_CANCEL, 'cancel')),
 		);
 		if($delcount > 1)
 		{
 			$fieldsets['confirm']['triggers']['hidden'] = $this->hidden('etrigger_batch', 'delete');
 		}
 
+		$id = null;
 		$forms[$id] = array(
 			'id' => $this->getElementId(), // unique string used for building element ids, REQUIRED
 			'url' => e_REQUEST_SELF, // default

@@ -10,6 +10,11 @@
 *
 */
 
+if(!empty($_POST) && !isset($_POST['e-token']))
+{
+	$_POST['e-token'] = ''; // make sure e-token hasn't been deliberately removed.
+}
+
 if (!defined('e107_INIT'))
 {
 	require_once("../class2.php");
@@ -149,7 +154,7 @@ JS;
 				case 'deluser':
 					if($_POST['userid'])
 					{
-						$id = $_POST['userid'];
+						$id = (int) $_POST['userid'];
 						$_POST['etrigger_delete'] = array($id => $id);
 						$user = e107::getDb()->retrieve('user', 'user_email, user_name', 'user_id='.$id);
 						$rplc_from = array('[x]', '[y]', '[z]');
@@ -502,7 +507,13 @@ class users_admin_ui extends e_admin_ui
 		else 
 		{
 
-			$new_data['user_password']	= e107::getUserSession()->HashPassword($new_data['user_password'], $new_data['user_login']);
+			// issues #3126, #3143: Login not working after admin set a new password using the backend
+			// Backend used user_login instead of user_loginname (used in usersettings) and did't escape the password.
+			$savePassword = $new_data['user_password'];
+			$loginname = $new_data['user_loginname'] ? $new_data['user_loginname'] : $old_data['user_loginname'];
+			$email = (isset($new_data['user_email']) && $new_data['user_email']) ? $new_data['user_email'] : $old_data['user_email'];
+			$new_data['user_password'] = e107::getDb()->escape(e107::getUserSession()->HashPassword($savePassword, $loginname), false);
+
 			e107::getMessage()->addDebug("Password Hash: ".$new_data['user_password']);
 		}
 		
@@ -954,7 +965,7 @@ class users_admin_ui extends e_admin_ui
 		$response->appendBody($frm->open('adminperms'))
 			->appendBody($prm->renderPermTable('grouped', $sysuser->getValue('perms')))
 			->appendBody($prm->renderCheckAllButtons())
-			->appendBody($prm->renderSubmitButtons())
+			->appendBody($prm->renderSubmitButtons().$frm->token())
 			->appendBody($frm->close());
 		
 		$this->addTitle(str_replace(array('[x]', '[y]'), array($sysuser->getName(), $sysuser->getValue('email')), USRLAN_230));
@@ -2505,7 +2516,8 @@ class users_admin_form_ui extends e_admin_form_ui
 			'<span class="label label-success label-status">'.LAN_ACTIVE.'</span>',
 			"<span class='label label-important label-danger label-status'>".LAN_BANNED."</span>",
 			"<span class='label label-default label-status'>".LAN_NOTVERIFIED."</span>",
-			"<span class='label label-info label-status'>".LAN_BOUNCED."</span>"
+			"<span class='label label-info label-status'>".LAN_BOUNCED."</span>",
+			"<span class='label label-important label-danger label-status'>".USRLAN_56."</span>", // Deleted
 		);
 		
 		if($mode == 'filter' || $mode == 'batch')
@@ -2717,7 +2729,7 @@ class users_admin_form_ui extends e_admin_form_ui
 			//		$text .= "<option value='unadmin'>".USRLAN_34."</option>\n";
 
 					$opts['adminperms'] = USRLAN_221;
-					$opts['uadmin']     = USRLAN_34;
+					$opts['unadmin']     = USRLAN_34;
 				}
 		}
 		elseif(USERID ===  $user_id ||  $user_id > USERID)
@@ -2822,7 +2834,8 @@ class users_admin_form_ui extends e_admin_form_ui
 
 		    'gen_datestamp' 	=> array ( 'title' => 'Special', 'type' => 'hidden', 'nolist'=>true, 'data' => 'int', 'width' => 'auto', 'filter' => true, 'help' => '', 'readParms' => '', 'writeParms' => '', 'class' => 'left', 'thclass' => 'left',  ),
 		    'gen_user_id' 		=> array ( 'title' => USRLAN_210, 'type' => 'boolean', 'batch'=>true, 'data' => 'int', 'inline'=>true, 'width' => '15%', 'help' => '', 'readParms' => '', 'writeParms' => '', 'class' => 'center', 'thclass' => 'center',  ),
-		    'gen_chardata' 		=> array ( 'title' => LAN_ICON, 'type' => 'dropdown', 'data' => 'str', 'inline'=>true, 'width' => 'auto', 'help' => '', 'readParms' => '', 'writeParms' => array(), 'class' => 'left', 'thclass' => 'left',  ),
+		    //'gen_chardata' 		=> array ( 'title' => LAN_ICON, 'type' => 'dropdown', 'data' => 'str', 'inline'=>true, 'width' => 'auto', 'help' => '', 'readParms' => '', 'writeParms' => array(), 'class' => 'left', 'thclass' => 'left',  ),
+		    'gen_chardata' 		=> array ( 'title' => LAN_ICON, 'type' => 'method', 'data' => 'str', 'inline'=>true, 'width' => 'auto', 'help' => '', 'readParms' => array(), 'writeParms' => array(), 'class' => 'left', 'thclass' => 'left',  ),
 
 
 		    'options'			=> array ( 'title' => LAN_OPTIONS, 'type' =>'method', 'data' => null, 'width' => '10%', 'thclass' => 'center last', 'class' => 'right last', 'forced' => '1', 'readParms'=>'edit=0'  ),
@@ -2949,6 +2962,25 @@ class users_admin_form_ui extends e_admin_form_ui
 			}
 		}
 
+		function gen_chardata($curVal, $mode, $parms=null)
+		{
+			switch($mode)
+			{
+				case 'read':
+					return '<img src="'.e_IMAGE.'ranks/'.$curVal.'"/><br/>'.$curVal;
+					break;
+
+				case 'write':
+					$opts = $this->getController()->getFields()['gen_chardata']['writeParms']['optArray'];
+					return e107::getForm()->select('gen_chardata', $opts, $curVal);
+
+				case 'filter':
+				case 'batch':
+					return null;
+					break;
+
+			}
+		}
 
 
 	}

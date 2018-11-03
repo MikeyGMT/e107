@@ -160,11 +160,13 @@ class e_url
 				if($newLocation != $this->_request)
 				{
 					$redirect = e107::getParser()->replaceConstants($newLocation);
-					list($file,$query) = explode("?",$redirect,2);
+					list($file,$query) = explode("?", $redirect,2);
 
 					$get = array();
 					if(!empty($query))
 					{
+						// issue #3171 fix double ampersand in case of wrong query definition
+						$query = str_replace('&&', '&', $query);
 						parse_str($query,$get);
 					}
 
@@ -179,7 +181,7 @@ class e_url
 					if(file_exists($file))
 					{
 						define('e_CURRENT_PLUGIN', $plug);
-						define('e_QUERY', $query); // do not add to e107_class.php
+						define('e_QUERY', str_replace('&&', '&', $query)); // do not add to e107_class.php
 						define('e_URL_LEGACY', $redirect);
 
 						$this->_include= $file;
@@ -255,6 +257,9 @@ class eFront
 	 * @var eRouter
 	 */
 	protected $_router;
+
+
+	protected $_response;
 	
 	/**
 	 * @var string path to file to include - the old deprecated way of delivering content
@@ -389,7 +394,7 @@ class eFront
 		$router = new eRouter();
 		$this->setRouter($router);
 		
-	//	$response = new eResponse();
+		/** @var eResponse $response */
 		$response = e107::getSingleton('eResponse');
 		$this->setResponse($response);
 		
@@ -1624,9 +1629,9 @@ class eRouter
 	 */
 	public function getAliases($lanCode = null)
 	{
-		if($lan) 
+		if($lanCode)
 		{
-			return e107::findPref('url_aliases/'.$lan, array());
+			return e107::findPref('url_aliases/'.$lanCode, array());
 		}
 		return $this->_aliases;
 	}
@@ -4131,7 +4136,7 @@ class eResponse
 	
 	/**
 	 * Get content
-	 * @param str $ns
+	 * @param string $ns
 	 * @param boolean $reset
 	 * @return string
 	 */
@@ -4148,8 +4153,8 @@ class eResponse
 	}
 	
 	/**
-	 * @param str $title
-	 * @param str $ns
+	 * @param string $title
+	 * @param string $ns
 	 * @return eResponse
 	 */
 	function setTitle($title, $ns = 'default')
@@ -4167,8 +4172,8 @@ class eResponse
 	}
 
 	/**
-	 * @param str $title
-	 * @param str $ns
+	 * @param string $title
+	 * @param string $ns
 	 * @return eResponse
 	 */
 	function appendTitle($title, $ns = 'default')
@@ -4190,8 +4195,8 @@ class eResponse
 	}
 
 	/**
-	 * @param str $title
-	 * @param str $ns
+	 * @param string $title
+	 * @param string $ns
 	 * @return eResponse
 	 */
 	function prependTitle($title, $ns = 'default')
@@ -4214,7 +4219,7 @@ class eResponse
 
 	/**
 	 * Assemble title
-	 * @param str $ns
+	 * @param string $ns
 	 * @param bool $reset
 	 * @return string
 	 */
@@ -4687,6 +4692,9 @@ class eHelper
 		);*/
 
 		$tp = e107::getParser();
+
+		// issue #3245: strip all html and bbcode before processing
+		$title = $tp->toText($title);
 
 		$title = $tp->toASCII($title);
 

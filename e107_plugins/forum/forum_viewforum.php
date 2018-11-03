@@ -178,6 +178,8 @@ if(!empty($FORUM_VIEWFORUM_TEMPLATE) && is_array($FORUM_VIEWFORUM_TEMPLATE) && T
 	$FORUM_IMPORTANT_ROW			= $FORUM_VIEWFORUM_TEMPLATE['divider-important'];
 	$FORUM_NORMAL_ROW				= $FORUM_VIEWFORUM_TEMPLATE['divider-normal'];	
 	
+	$FORUM_CRUMB				    = $FORUM_VIEWFORUM_TEMPLATE['forum-crumb'];	
+	
 }
 
 
@@ -193,25 +195,20 @@ if(!empty($forumInfo['forum_description']))
 {
 	define("META_DESCRIPTION", $tp->text_truncate(
 		str_replace(
-			array('"', "'"), '', strip_tags($tp->toHTML($forumInfo['forum_description']))
+			//array('"', "'"), '', strip_tags($tp->toHTML($forumInfo['forum_description']))
+			array('"', "'"), '', $tp->toText($forumInfo['forum_description'])
 	), 250, '...'));
 }
 
-//define('MODERATOR', $forum_info['forum_moderators'] != '' && check_class($forum_info['forum_moderators']));
-//$modArray = $forum->forum_getmods($forum_info['forum_moderators']);
+$moderatorUserIds = $forum->getModeratorUserIdsByForumId($forumId);
+define('MODERATOR', (USER && in_array(USERID, $moderatorUserIds)));
 
-// $thread???
-$modArray = $forum->forumGetMods($thread->forum_info['forum_moderators']);
-define('MODERATOR', (USER && is_array($modArray) && in_array(USERID, array_keys($modArray))));
-
-//----$message = '';
 if (MODERATOR)
 {
 	if ($_POST)
 	{
 		require_once(e_PLUGIN.'forum/forum_mod.php');
-//--		$message = forum_thread_moderate($_POST);
-    $forumSCvars['message']=forum_thread_moderate($_POST);
+		$forumSCvars['message'] = forum_thread_moderate($_POST);
 	}
 }
 
@@ -270,11 +267,14 @@ if ($pages)
 {
 	if(strpos($FORUM_VIEW_START, 'THREADPAGES') !== false || strpos($FORUM_VIEW_END, 'THREADPAGES') !== false)
 	{
-		$url = e107::url('forum','forum',$forumInfo, array('query'=>array('p'=>'[FROM]')));
-/*--
+		// issue #3087 url need to be decoded first (because the [FROM] get's encoded in url())
+		// and to encode the full url to not loose the id param when being used in the $forumSCvars['parms']
+		$url = rawurlencode(rawurldecode(e107::url('forum','forum',$forumInfo, array('query'=>array('p'=>'[FROM]')))));
+
+		/*--
 		$parms = "total={$pages}&type=page&current={$page}&url=".$url."&caption=off";
 		$fVars->THREADPAGES = $tp->parseTemplate("{NEXTPREV={$parms}}");
---*/
+		--*/
 		$forumSCvars['parms'] = "total={$pages}&type=page&current={$page}&url=".$url."&caption=off";
 //-- ?????????? unset $ulrparms????
 		unset($urlparms);
@@ -331,6 +331,7 @@ $fVars->MODERATORS = LAN_FORUM_1009.': '.implode(', ', $modUser);
 $fVars->BROWSERS = '';
 --*/
 		$forumSCvars['forum_name']= $forumInfo['forum_name'];
+		$forumSCvars['forum_image']= $forumInfo['forum_image'];
 		$forumSCvars['modUser']= $modUser;
 		$forumSCvars['track_online']= varset($pref['track_online']);
 

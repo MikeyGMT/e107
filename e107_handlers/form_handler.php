@@ -67,8 +67,7 @@ class e_form
 	protected $_tabindex_enabled = true;
 	protected $_cached_attributes = array();
 	protected $_field_warnings = array();
-
-
+	private $_inline_token = null;
 
 	/**
 	 * @var user_class
@@ -83,6 +82,20 @@ class e_form
 		$this->_tabindex_enabled = $enable_tabindex;
 		$this->_uc = e107::getUserClass();
 		$this->setRequiredString('<span class="required">*&nbsp;</span>');
+	}
+
+	/**
+	 * @return array
+	 * @see https://github.com/e107inc/e107/issues/3533
+	 */
+	private static function sort_get_files_output($tmp)
+	{
+		usort($tmp, function ($left, $right) {
+			$left_full_path = $left['path'] . $left['fname'];
+			$right_full_path = $right['path'] . $right['fname'];
+			return strcmp($left_full_path, $right_full_path);
+		});
+		return $tmp;
 	}
 
 
@@ -512,9 +525,10 @@ class e_form
 	function tabs($array,$options = array())
 	{
 		$initTab = varset($options['active'],false);
+		$id = !empty($options['id']) ? 'id="'.$options['id'].'"' : '';
 		$text  ='
 		<!-- Nav tabs -->
-			<ul class="nav nav-tabs">';
+			<ul '.$id.' class="nav nav-tabs">';
 
 		$c = 0;
 
@@ -958,39 +972,72 @@ class e_form
 	 */
 	function iconpicker($name, $default, $label, $options = array(), $ajax = true)
 	{
+		//v2.2.0
+			$options['icon'] = 1;
+			$options['glyph'] = 1;
+			$options['w'] = 64;
+			$options['h'] = 64;
+			$options['media'] = '_icon';
+
+			if(!isset($options['legacyPath']))
+			{
+		        $options['legacyPath'] = "{e_IMAGE}icons";
+			}
+
+			return $this->mediapicker($name, $default, $options);
 
 
-		$options['media'] = '_icon';
+	/*	$options['media'] = '_icon';
 		$options['legacyPath'] = "{e_IMAGE}icons";
 		
-		return $this->imagepicker($name, $default, $label, $options);
+		return $this->imagepicker($name, $default, $label, $options);*/
 		
 
 	}
 
+
 	/**
-	 * Internal Function used by imagepicker and filepicker
-	 */ 
-	private function mediaUrl($category = '', $label = '', $tagid='', $extras=null)
+	 * Internal Function used by imagepicker, filepicker, mediapicker()
+	 * @param string $category
+	 * @param string $label
+	 * @param string $tagid
+	 * @param null   $extras
+	 * @return string
+	 */
+	public function mediaUrl($category = '', $label = '', $tagid='', $extras=null)
 	{
-		
-		$cat = ($category) ? '&amp;for='.$category : "";
-		if(!$label) $label = ' Upload an image or file';
-		if($tagid) $cat .= '&amp;tagid='.$tagid; 
-		
 		if(is_string($extras))
 		{
 			parse_str($extras,$extras);
 		}
-		
-		if(vartrue($extras['bbcode'])) $cat .= '&amp;bbcode=1'; 	
-		$mode = vartrue($extras['mode'],'main');
-		$action = vartrue($extras['action'],'dialog'); 
-		// $tabs // TODO - option to choose which tabs to display.  
-		
-		//TODO Parse selection data back to parent form. 
+
+		$category = str_replace('+', '^', $category); // Bc Fix.
+
+		$cat    = ($category) ? '&amp;for='.urlencode($category) : "";
+		$mode   = vartrue($extras['mode'],'main');
+		$action = vartrue($extras['action'],'dialog');
+
+
+
+		if(empty($label))
+		{
+			 $label = ' Upload an image or file';
+		}
+
+		// TODO - option to choose which tabs to display by default.
 
 		$url = e_ADMIN_ABS."image.php?mode={$mode}&amp;action={$action}".$cat;
+
+		if(!empty($tagid))
+		{
+			$url .= '&amp;tagid='.$tagid;
+		}
+
+		if(!empty($extras['bbcode']))
+		{
+			$url .= '&amp;bbcode='.$extras['bbcode'];
+		}
+
 		$url .= "&amp;iframe=1";
 		
 		if(vartrue($extras['w']))
@@ -998,15 +1045,35 @@ class e_form
 			$url .= "&amp;w=".$extras['w'];	
 		}
 
-		if(!empty($extras['glyphs']))
+		if(!empty($extras['image']))
 		{
-			$url .= "&amp;glyphs=1";	
-		}	
+			$url .= "&amp;image=1";
+		}
+
+		if(!empty($extras['glyphs']) || !empty($extras['glyph']))
+		{
+			$url .= "&amp;glyph=1";
+		}
+
+		if(!empty($extras['icons']) || !empty($extras['icon']))
+		{
+			$url .= "&amp;icon=1";
+		}
+
+		if(!empty($extras['youtube']))
+		{
+			$url .= "&amp;youtube=1";
+		}
 		
 		if(!empty($extras['video']))
 		{
 			$url .= ($extras['video'] == 2) ? "&amp;video=2" : "&amp;video=1";
-		}			
+		}
+
+		if(!empty($extras['audio']))
+		{
+			$url .= "&amp;audio=1";
+		}
 
 		if(!empty($extras['path']) && $extras['path'] == 'plugin')
 		{
@@ -1026,37 +1093,13 @@ class e_form
 		$class = !empty($extras['class']) ? $extras['class']." " : '';
 		$title = !empty($extras['title']) ? $extras['title'] : $title;
 
+	    $ret = "<a title=\"{$title}\" class='".$class."e-modal' data-modal-submit='true' data-modal-caption='".LAN_EFORM_007."' data-cache='false' data-target='#uiModal' href='".$url."'>".$label."</a>"; // using bootstrap.
 
-	//	$ret = "<a title=\"{$title}\" rel='external' class='e-dialog' href='".$url."'>".$label."</a>"; // using colorXXXbox. 
-	    $ret = "<a title=\"{$title}\" class='".$class."e-modal' data-modal-caption='".LAN_EFORM_007."' data-cache='false' data-target='#uiModal' href='".$url."'>".$label."</a>"; // using bootstrap.
-
-	
-	//	$footer = "<div style=\'padding:5px;text-align:center\' <a href=\'#\' >Save</a></div>";
-	$footer = '';
 		if(!e107::getRegistry('core/form/mediaurl'))
 		{
-			/*
-			e107::js('core','core/admin.js','prototype');
-			e107::js('core','core/dialog.js','prototype');
-			e107::js('core','core/draggable.js','prototype');
-			e107::css('core','core/dialog/dialog.css','prototype');
-			e107::css('core','core/dialog/e107/e107.css','prototype');
-			e107::js('footer-inline','
-			$$("a.e-dialog").invoke("observe", "click", function(ev) {
-					var element = ev.findElement("a");
-					ev.stop();
-					new e107Widgets.URLDialog(element.href, {
-						id: element["id"] || "e-dialog",
-						width: 890,
-						height: 680
-		
-					}).center().setHeader("Media Manager : '.$category.'").setFooter('.$footer.').activate().show();
-				});
-			
-			','prototype');
-			*/
 			e107::setRegistry('core/form/mediaurl', true);
 		}
+
 		return $ret;
 	}
 
@@ -1201,6 +1244,7 @@ class e_form
 	 */
 	function imagepicker($name, $default, $previewURL = '', $sc_parameters = '')
 	{
+
 		$tp = e107::getParser();
 		$name_id = $this->name2id($name);
 		$meta_id = $name_id."-meta";
@@ -1214,6 +1258,21 @@ class e_form
 		{
 			$sc_parameters = array();
 		}
+
+		$cat = $tp->toDB(vartrue($sc_parameters['media']));
+
+	//	if(deftrue('e_DEBUG_MEDIAPICKER'))
+	//	{
+			// v2.2.0
+			$sc_parameters['image'] = 1;
+			$sc_parameters['dropzone'] = 1;
+			if(!empty($sc_parameters['video'])) // bc fix
+			{
+				$sc_parameters['youtube'] = 1;
+			}
+
+			return $this->mediapicker($name, $default, $sc_parameters);
+	//	}
 
 
 		if(empty($sc_parameters['media']))
@@ -1270,7 +1329,7 @@ class e_form
 		
 
 		//$width = intval(vartrue($sc_parameters['width'], 150));
-		$cat = $tp->toDB(vartrue($sc_parameters['media']));	
+
 		
 		if($cat == '_icon') // ICONS
 		{
@@ -1340,6 +1399,190 @@ class e_form
 		return $ret;
 
 	}
+
+
+/**
+	 * Media Picker
+
+	 * @param string $name input name
+	 * @param string $default default value
+	 * @param string $parms shortcode parameters
+	 *  --- $parms list ---
+	 * - media: if present - load from media category table
+	 * - w: preview width in pixels
+	 * - h: preview height in pixels
+	 * - help: tooltip
+	 * - youtube=1 (Enables the Youtube tab)
+     * - image=1 (Enable the Images tab)
+	 * - video=1 (Enable the Video tab)
+	 * - audio=1  (Enable the Audio tab)
+     * - glyph=1 (Enable the Glyphs tab).
+	 * @example $frm->imagepicker('banner_image', $_POST['banner_image'], '', 'media=banner&w=600');
+	 * @return string html output
+	 */
+	function mediapicker($name, $default, $parms = '')
+	{
+
+
+		$tp = e107::getParser();
+		$name_id = $this->name2id($name);
+		$meta_id = $name_id."-meta";
+
+		if(is_string($parms))
+		{
+			if(strpos($parms, '=') === false) $parms = 'media='.$parms;
+			parse_str($parms, $parms);
+		}
+		elseif(empty($parms))
+		{
+			$parms = array();
+		}
+
+
+		if(empty($parms['media']))
+		{
+			$parms['media'] = '_common';
+		}
+
+		$title = !empty($parms['help']) ? "title='".$parms['help']."'" : "";
+
+		if(!isset($parms['w']))
+		{
+			$parms['w'] = 220;
+		}
+
+		if(!isset($parms['h']))
+		{
+			$parms['h'] = 190;
+		}
+
+
+	//	$width = vartrue($parms['w'], 220);
+	//	$height = vartrue($parms['h'], 190);
+	// e107::getDebug()->log($parms);
+
+		// Test Files...
+	//	$default = '{e_MEDIA_VIDEO}2018-07/samplevideo_720x480_2mb.mp4';
+	//	$default = '{e_MEDIA_FILE}2016-03/Colony_Harry_Gregson_Williams.mp3';
+	//	$default = '{e_PLUGIN}gallery/images/butterfly.jpg';
+	//	$default = 'NuIAYHVeFYs.youtube';
+	//	$default = ''; // empty
+	//	$default = '{e_MEDIA_IMAGE}2018-07/Jellyfish.jpg';
+
+		$class = '';
+
+		if($parms['icon'])
+		{
+			$class = 'icon-preview mediaselector-container-icon';
+			$parms['type'] = 'icon';
+		}
+
+		$preview = e107::getMedia()->previewTag($default,$parms);
+
+		$cat = $tp->toDB(vartrue($parms['media']));
+
+		$ret = "<div  class='mediaselector-container e-tip well well-small ".$class."' {$title} style='position:relative;vertical-align:top;margin-right:25px; display:inline-block; width:".$parms['w']."px;min-height:".$parms['h']."px;'>";
+
+		$parms['class'] = 'btn btn-sm btn-default';
+
+		$dropzone = !empty($parms['dropzone']) ? " dropzone" : "";
+	//	$parms['modal-delete-label'] = LAN_DELETE;
+
+		if(empty($preview))
+		{
+			$parms['title'] = LAN_ADD;
+			$editIcon        = $this->mediaUrl($cat, $tp->toGlyph('fa-plus', array('fw'=>1)), $name_id,$parms);
+			$previewIcon     = '';
+		}
+		else
+		{
+			$editIcon       = $this->mediaUrl($cat, $tp->toGlyph('fa-edit', array('fw'=>1)), $name_id,$parms);
+		//	$previewIcon    = "<a title='".LAN_PREVIEW."' class='btn btn-sm btn-default btn-secondary e-modal' data-modal-caption='".LAN_PREVIEW."' href='".$previewURL."'>".$tp->toGlyph('fa-search', array('fw'=>1))."</a>";
+			$previewIcon    = '';
+		}
+
+
+		if(!empty($parms['icon'])) // empty overlay without button.
+		{
+			$parms['class'] = '';
+			$editIcon = $this->mediaUrl($cat, "<span><!-- --></span>", $name_id,$parms);
+		}
+
+		$ret .= "<div id='{$name_id}_prev' class='mediaselector-preview".$dropzone."'>";
+
+		$ret .= $preview; // image, video. audio tag etc.
+
+		$ret .= '</div><div class="overlay">
+				    <div class="text">'.$editIcon.$previewIcon.'</div>
+				  </div>';
+
+		$ret .= "</div>\n";
+		$ret .=	"<input type='hidden' name='{$name}' id='{$name_id}' value='{$default}' />";
+		$ret .=	"<input type='hidden' name='mediameta_{$name}' id='{$meta_id}' value='' />";
+
+		if(empty($dropzone))
+		{
+			return $ret;
+		}
+		// Drag-n-Drop Upload
+		// @see https://www.dropzonejs.com/#server-side-implementation
+
+		e107::js('footer', e_WEB_ABS."lib/dropzone/dropzone.min.js");
+		e107::css('url', e_WEB_ABS."lib/dropzone/dropzone.min.css");
+		e107::css('inline', "
+			.dropzone { background: transparent; border:0 }
+		");
+
+			$INLINEJS = "
+				Dropzone.autoDiscover = false;
+				$(function() {
+				    $('#".$name_id."_prev').dropzone({ 
+				        url: '".e_JS."plupload/upload.php?for=".$cat."',
+				        createImageThumbnails: false,
+				        uploadMultiple :false,
+						dictDefaultMessage: \"".defset('LAN_UI_DROPZONE_DROP_FILES', "Drop files here to upload")."\",
+				        maxFilesize: ".(int) ini_get('upload_max_filesize').",
+				         success: function (file, response) {
+				            
+				            file.previewElement.classList.add('dz-success');
+				    
+				         //   console.log(response);
+				            
+				            if(response)
+				            {   
+				                var decoded = jQuery.parseJSON(response);
+				                console.log(decoded);
+				                if(decoded.preview && decoded.result)
+				                {
+				                    $('#".$name_id."').val(decoded.result);
+				                    $('#".$name_id."_prev').html(decoded.preview);
+				                }
+								else if(decoded.error)
+								{
+									file.previewElement.classList.add('dz-error');
+									$('#".$name_id."_prev').html(decoded.error.message);
+								}				            
+				            }
+				            
+				        },
+				        error: function (file, response) {
+				            file.previewElement.classList.add('dz-error');
+				        }
+				    });
+				});
+			
+			";
+
+
+		e107::js('footer-inline', $INLINEJS);
+
+		return $ret;
+
+	}
+
+
+
+
 
 
 
@@ -2077,12 +2320,15 @@ class e_form
 	/**
 	 * Bbcode Area. Name, value, template, media-Cat, size, options array eg. counter
 	 * IMPORTANT: $$mediaCat is also used is the media-manager category identifier
-	 * @param $name
-	 * @param $value
-	 * @param $template
-	 * @param $mediaCat _common
-	 * @param $size : small | medium | large
-	 * @param $options array(); 
+	 * @param string $name
+	 * @param mixed $value
+	 * @param string $template
+	 * @param string $mediaCat _common
+	 * @param string $size : small | medium | large
+	 * @param array $options array();
+	 * @param bool $options['wysiwyg'] when set to false will disable wysiwyg if active.
+	 * @param string $options['class'] override class.
+	 * @param string $options['id']
 	 */
 	function bbarea($name, $value, $template = '', $mediaCat='_common', $size = 'large', $options = array())
 	{
@@ -2124,14 +2370,41 @@ class e_form
 		}
 
 		// auto-height support
-	   	$options['class'] 	= 'tbox bbarea '.($size ? ' '.$size : '').' e-wysiwyg e-autoheight form-control';
+/*
 		$bbbar 				= '';
-		
+		$wysiwyg = null;
+		$wysiwygClass = ' e-wysiwyg';
 
-		$help_tagid 		= $this->name2id($name)."--preview";
+		if(isset($options['wysiwyg']))
+		{
+			$wysiwyg = $options['wysiwyg'];
+		}
 
+		if($wysiwyg === false)
+		{
+			$wysiwygClass = '';
+		}
 
-		if(e107::wysiwyg(true) === false) // bbarea loaded, so activate wysiwyg (if enabled in preferences)
+		$options['class'] 	= 'tbox bbarea '.($size ? ' '.$size : '').$wysiwygClass.' e-autoheight form-control';
+*/
+		$options['class'] 	= 'tbox bbarea '.($size ? ' '.$size : '').' e-wysiwyg e-autoheight form-control';
+
+		if (isset($options['id']) && !empty($options['id']))
+		{
+			$help_tagid 		= $this->name2id($options['id'])."--preview";
+		}
+		else
+		{
+			$help_tagid 		= $this->name2id($name)."--preview";
+		}
+
+		if (!isset($options['wysiwyg']))
+		{
+			$options['wysiwyg'] = true;
+		}
+
+		//if(e107::wysiwyg(true) === false || $wysiwyg === false) // bbarea loaded, so activate wysiwyg (if enabled in preferences)
+		if(e107::wysiwyg($options['wysiwyg'],true) === 'bbcode') // bbarea loaded, so activate wysiwyg (if enabled in preferences)
 		{
 			$options['other'] 	= "onselect='storeCaret(this);' onclick='storeCaret(this);' onkeyup='storeCaret(this);' {$height}";
 		}
@@ -2140,14 +2413,14 @@ class e_form
 			$options['other'] 	= " ".$height;
 		}
 
-	
+
 		$counter 			= vartrue($options['counter'],false); 
 		
 		$ret = "<div class='bbarea {$size}'>
 		<div class='field-spacer'><!-- --></div>\n";
 
 
-		if(e107::wysiwyg() === true)
+		if(e107::wysiwyg() === true) // && $wysiwyg !== false)
 		{
 			$eParseList = e107::getConfig()->get('e_parse_list');
 
@@ -2672,15 +2945,15 @@ class e_form
 
 	function select_open($name, $options = array())
 	{
+
 		if(!is_array($options)) parse_str($options, $options);
 
 
-		
-		if(vartrue($options['size']) && !is_numeric($options['size']))
+		if(!empty($options['size']) && !is_numeric($options['size']))
 		{
 			if(!empty($options['class']))
 			{
-				$options['class'] .= "form-control input-".$options['size'];
+				$options['class'] .= " form-control input-".$options['size'];
 			}
 			else
 			{
@@ -2891,7 +3164,22 @@ class e_form
 
 		if(!empty($current_value) && !is_numeric($current_value)) // convert name to id.
 		{
-			$current_value = $this->_uc->getID($current_value);
+			//$current_value = $this->_uc->getID($current_value);
+			// issue #3249 Accept also comma separated values
+			if (!is_array($current_value))
+			{
+				$current_value = explode(',', $current_value);
+			}
+			$tmp = array();
+			foreach($current_value as $val)
+			{
+				if (!empty($val))
+				{
+					$tmp[] = !is_numeric($val) ? $this->_uc->getID(trim($val)) : (int) $val;
+				}
+			}
+			$current_value = implode(',', $tmp);
+			unset($tmp);
 		}
 
 		return $this->select_open($name, $select_options)."\n".$this->_uc->vetted_tree($name, array($this, '_uc_select_cb'), $current_value, $uc_options, $opt_options)."\n".$this->select_close();
@@ -2981,9 +3269,9 @@ class e_form
 			{
 				$sel = is_array($selected) ? in_array($value, $selected) : ($value == $selected);
 
-				if(!empty($options['disabled']))
+				if(!empty($options['optDisabled']) && is_array($options['optDisabled']))
 				{
-					$opts['disabled'] = in_array($value, $options['disabled']);
+					$opts['disabled'] = in_array($value, $options['optDisabled']);
 				}
 
 				$text .= $this->option($label, $value, $sel, $opts)."\n";
@@ -3018,9 +3306,9 @@ class e_form
 			}
 			else
 			{
-				if(!empty($options['disabled']))
+				if(!empty($options['optDisabled']) && is_array($options['optDisabled']))
 				{
-					$opts['disabled'] = in_array($val, $options['disabled']);
+					$opts['disabled'] = in_array($val, $options['optDisabled']);
 				}
 
 				$text .= $this->option($lab, $val, (is_array($selected) ? in_array($val, $selected) : $selected == $val), $opts)."\n";
@@ -3266,7 +3554,8 @@ class e_form
 		}
 		else
 		{
-			$include = (deftrue("FONTAWESOME")) ? "data-loading-icon='fa-spinner' data-disable='true'" : "";
+			// $include = (deftrue("FONTAWESOME")) ? "data-loading-icon='fa-spinner' data-disable='true'" : "";
+			$include = (deftrue("FONTAWESOME")) ? "data-loading-icon='fa-spinner' " : ""; // data-disable breaks db.php charset Fix.
 		}
 
 		$confirmation = LAN_JSCONFIRM;
@@ -3863,9 +4152,10 @@ class e_form
 		if(!varset($fromval)){ $fromval = 0; }
 
         $ascdesc = (varset($ascdesc) == 'desc') ? 'asc' : 'desc';
+
 		foreach($fieldarray as $key=>$val)
 		{
-     		if ((in_array($key, $columnPref) || $key == 'options' || (vartrue($val['forced']))) && !vartrue($val['nolist']))
+     		if ((in_array($key, $columnPref) || ($key === 'options' && isset($val['title'])) || (vartrue($val['forced']))) && !vartrue($val['nolist']))
 			{
 				$cl = (vartrue($val['thclass'])) ? " class='".$val['thclass']."'" : "";
 				$text .= "
@@ -3883,8 +4173,8 @@ class e_form
 				$text .= (vartrue($val['url'])) ? "<a href='".str_replace(array('&amp;', '&'), array('&', '&amp;'),$val['url'])."'>" : "";  // Really this column-sorting link should be auto-generated, or be autocreated via unobtrusive js.
 	            $text .= defset($val['title'], $val['title']);
 				$text .= ($val['url']) ? "</a>" : "";
-	            $text .= ($key == "options" && !vartrue($val['noselector'])) ? $this->columnSelector($fieldarray, $columnPref) : "";
-				$text .= ($key == "checkboxes") ? $this->checkbox_toggle('e-column-toggle', vartrue($val['toggle'], 'multiselect')) : "";
+	            $text .= ($key === "options" && !vartrue($val['noselector'])) ? $this->columnSelector($fieldarray, $columnPref) : "";
+				$text .= ($key === "checkboxes") ? $this->checkbox_toggle('e-column-toggle', vartrue($val['toggle'], 'multiselect')) : "";
 
 	
 	 			$text .= "
@@ -4145,14 +4435,25 @@ class e_form
 	}
 
 	/**
+	 * Inline Token
+	 * @return string
+	 */
+	private function inlineToken()
+	{
+		$this->_inline_token = $this->_inline_token ?:
+			password_hash(session_id(), PASSWORD_DEFAULT, ['cost' => 04]);
+		return $this->_inline_token;
+	}
+
+	/**
 	 * Create an Inline Edit link. 
-	 * @param $dbField : field being edited //TODO allow for an array of all data here. 
-	 * @param $pid : primary ID of the row being edited. 
-	 * @param $fieldName - Description of the field name (caption)
-	 * @param $curVal : existing value of in the field
-	 * @param $linkText : existing value displayed
-	 * @param $type text|textarea|select|date|checklist
-	 * @param $array : array data used in dropdowns etc. 
+	 * @param string $dbField : field being edited
+	 * @param int $pid : primary ID of the row being edited.
+	 * @param string $fieldName - Description of the field name (caption)
+	 * @param mixed $curVal : existing value of in the field
+	 * @param mixed $linkText : existing value displayed
+	 * @param string $type text|textarea|select|date|checklist
+	 * @param array $array : array data used in dropdowns etc.
 	 */
 	public function renderInline($dbField, $pid, $fieldName, $curVal, $linkText, $type='text', $array=null, $options=array())
 	{
@@ -4188,6 +4489,8 @@ class e_form
 		$text = "<a class='e-tip e-editable editable-click ".$class."' data-name='".$dbField."' ";
 		$text .= (is_array($array)) ? "data-source='".$source."'  " : "";
 		$text .= " title=\"".$title."\" data-type='".$type."' data-inputclass='x-editable-".$this->name2id($dbField)." ".$class."' data-value=\"{$curVal}\"   href='#' ";
+
+		$options['token'] = $this->inlineToken();
 
 		if(!empty($options))
 		{
@@ -4315,13 +4618,18 @@ class e_form
 			if(!empty($parms['target']) && $parms['target']=='modal')
 			{
 				$eModal = " e-modal ";
-				$eModalCap = "data-modal-caption='#".$id."'";
+				$eModalCap = !empty($parms['modalCaption']) ? "data-modal-caption='".$parms['modalCaption']."'" : "data-modal-caption='#".$id."'";
 				$query['iframe'] = 1;
 			}
 			else
 			{
 				$eModal = "";
 				$eModalCap = "";
+			}
+
+			if(!empty($parms['modalSubmit']))
+			{
+				$eModalCap .= " data-modal-submit='true'";
 			}
 
 			$query = http_build_query($query, null, '&amp;');
@@ -4450,19 +4758,18 @@ class e_form
 		{
 			case 'number':
 				if(!$value) $value = '0';
+
 				if($parms)
 				{
 					if(!isset($parms['sep'])) $value = number_format($value, varset($parms['decimals'],0));
 					else $value = number_format($value, $parms['decimals'], vartrue($parms['point'], '.'), vartrue($parms['sep'], ' '));
 				}
-				
-				
+
 				if(empty($attributes['noedit']) && !empty($parms['editable']) && empty($parms['link'])) // avoid bad markup, better solution coming up
 				{
-					$mode = preg_replace('/[^\w]/', '', vartrue($_GET['mode'], ''));
-					$value = "<a class='e-tip e-editable editable-click' data-name='".$field."' title=\"".LAN_EDIT." ".$attributes['title']."\" data-type='text' data-pk='".$id."' data-url='".e_SELF."?mode={$mode}&action=inline&id={$id}&ajax_used=1' href='#'>".$value."</a>";
+					$value = $this->renderInline($field,$id,$attributes['title'],$value, $value);
 				}
-				else
+				elseif(!empty($parms['link']))
 				{
 					$value = $this->renderLink($value,$parms,$id);
 				}
@@ -4473,7 +4780,19 @@ class e_form
 			break;
 
 			case 'country':
-				$value = $this->getCountry($value);
+
+				$_value = $this->getCountry($value);
+
+				if(empty($attributes['noedit']) && !empty($parms['editable']) && empty($parms['link'])) // avoid bad markup, better solution coming up
+				{
+					$arr = $this->getCountry();
+					$value = $this->renderInline($field,$id,$attributes['title'],$value, $_value, 'select', $arr);
+				}
+				else
+				{
+					$value = $_value;
+				}
+
 			break;
 
 			case 'ip':
@@ -4502,7 +4821,7 @@ class e_form
 
 					$layouts    = e107::getLayouts($location, $ilocation, $where, $filter, $merge, false);
 
-					$label      = varset($layouts[$value], $value);
+					$label   = varset($layouts[$value], $value);
 
 					$value = $this->renderInline($field, $id, $attributes['title'], $value, $label, 'select', $layouts);
 				}
@@ -4568,15 +4887,9 @@ class e_form
 			
 				$value = ($value ? vartrue($parms['pre']).defset($value, $value).vartrue($parms['post']) : '');
 				
-				// Inline Editing.  
-				// Inline Editing with 'comma' @SecretR - please FIXME - empty values added. @see news 'render type' or 'media-manager' category for test examples. 
-				if(!vartrue($attributes['noedit']) && vartrue($parms['editable']) && !vartrue($parms['link'])) // avoid bad markup, better solution coming up
+				if(empty($attributes['noedit']) && !empty($parms['editable']) && empty($parms['link'])) // avoid bad markup, better solution coming up
 				{				
 					$xtype = ($attributes['type'] == 'dropdown') ? 'select' : 'checklist';
-					
-				//	$value = "<a class='e-tip e-editable editable-click' data-name='".$field."' data-value='{$_value}' data-source=\"".$source."\" title=\"".LAN_EDIT." ".$attributes['title']."\" data-type='".$xtype."' data-pk='".$id."' data-url='".e_SELF."?mode=&amp;action=inline&amp;id={$id}&amp;ajax_used=1' href='#'>".$value."</a>";
-					
-			
 					$value = $this->renderInline($field, $id, $attributes['title'], $_value, $value, $xtype, $wparms);
 				}
 								
@@ -4584,7 +4897,9 @@ class e_form
 			break;
 
 			case 'radio':
-				if($parms && is_array($parms)) // FIXME - add support for multi-level arrays (option groups)
+
+
+				if($parms && isset($parms[$value])) // FIXME - add support for multi-level arrays (option groups)
 				{
 					$value = vartrue($parms['pre']).vartrue($parms[$value]).vartrue($parms['post']);
 					break;
@@ -4595,6 +4910,11 @@ class e_form
 				if(!empty($attributes['writeParms']['optArray']))
 				{
 					$radioValue = $attributes['writeParms']['optArray'][$value];
+
+					if(empty($attributes['noedit']) && !empty($parms['editable']) && empty($parms['link'])) // avoid bad markup, better solution coming up
+					{
+						$radioValue = $this->renderInline($field, $id, $attributes['title'], $value, $radioValue, 'select', $attributes['writeParms']['optArray']);
+					}
 				}
 				else
 				{
@@ -4688,7 +5008,7 @@ class e_form
 					$tpl = $this->text($field, $value, 80, $options);
 
 					$mode = preg_replace('/[^\w]/', '', vartrue($_GET['mode'], ''));
-					$value = "<a id='" . $field . '_' . $id . "' class='e-tip e-editable editable-click editable-tags' data-emptytext='-' data-tpl='" . str_replace("'", '"', $tpl) . "' data-name='" . $field . "' title=\"" . LAN_EDIT . " " . $attributes['title'] . "\" data-type='text' data-pk='" . $id . "' " . $setValue . " data-url='" . e_SELF . "?mode={$mode}&amp;action=inline&amp;id={$id}&amp;ajax_used=1' href='#'>" . $value . "</a>";
+					$value = "<a id='" . $field . '_' . $id . "' class='e-tip e-editable editable-click editable-tags' data-emptytext='-' data-tpl='" . str_replace("'", '"', $tpl) . "' data-name='" . $field . "' data-token='".$this->inlineToken()."' title=\"" . LAN_EDIT . " " . $attributes['title'] . "\" data-type='text' data-pk='" . $id . "' " . $setValue . " data-url='" . e_SELF . "?mode={$mode}&amp;action=inline&amp;id={$id}&amp;ajax_used=1' href='#'>" . $value . "</a>";
 				}
 
 				$value = vartrue($parms['pre']) . $value . vartrue($parms['post']);
@@ -4759,13 +5079,10 @@ class e_form
 					}
 				}
 
-
-
 					
-				if(!vartrue($attributes['noedit']) && vartrue($parms['editable']) && !vartrue($parms['link'])) // avoid bad markup, better solution coming up
+				if(empty($attributes['noedit']) && !empty($parms['editable']) && empty($parms['link'])) // avoid bad markup, better solution coming up
 				{
-					$mode = preg_replace('/[^\w]/', '', vartrue($_GET['mode'], ''));
-					$value = "<a class='e-tip e-editable editable-click' data-emptytext='-' data-name='".$field."' title=\"".LAN_EDIT." ".$attributes['title']."\" data-type='text' data-pk='".$id."' ".$setValue." data-url='".e_SELF."?mode={$mode}&amp;action=inline&amp;id={$id}&amp;ajax_used=1' href='#'>".$value."</a>";
+					$value = $this->renderInline($field,$id,$attributes['title'],$value, $value);
 				}
 
 				$value = vartrue($parms['pre']).$value.vartrue($parms['post']);
@@ -4919,16 +5236,23 @@ class e_form
 							$parms['pre'] = rtrim($parms['legacyPath'],'/').'/';
 						}
 					//	return print_a($thparms,true); 
-					
-						$src = $tp->replaceConstants(vartrue($parms['pre']).$value, 'abs');
-				//		$thsrc = $tp->thumbUrl(vartrue($parms['pre']).$value, $thparms, varset($parms['thumb_urlraw']));
+
+						if(!empty($value[0]) && $value[0] === '{') // full path to convert.
+						{
+							$src = $tp->replaceConstants($value, 'abs');
+						}
+						else // legacy link without {e_XXX} path. eg. downloads thumbs.
+						{
+							$src = $tp->replaceConstants(vartrue($parms['pre']).$value, 'abs');
+						}
+
 						$alt = basename($src);
-					//	$ttl = '<img src="'.$thsrc.'" alt="'.$alt.'" class="thumbnail e-thumb" />';
+
 
 						$thparms['alt'] = $alt;
 						$thparms['class'] = "thumbnail e-thumb";
 
-
+					//	e107::getDebug()->log($value);
 
 						$ttl = $tp->toImage($value, $thparms);
 
@@ -4955,6 +5279,11 @@ class e_form
 					return $tp->toImage($value, $thparms);
 				}
 			break;
+
+
+			case 'media':
+				return e107::getMedia()->previewTag($value, $parms);
+			break;
 			
 			case 'files':
 				$ret = '<ol>';
@@ -4973,25 +5302,28 @@ class e_form
 			break;
 			
 			case 'date':
+
+				if(empty($attributes['noedit']) && !empty($parms['editable']) && empty($parms['link'])) // avoid bad markup, better solution coming up
+				{
+					$value = $this->renderInline($field,$id,$attributes['title'],$value, $value);
+				}
+
 				// just show original value
 			break;
 
 			case 'userclass':
-				$dispvalue = $this->_uc->uc_get_classname($value);
+				$dispvalue = $this->_uc->getName($value);
 					// Inline Editing.  
-				if(!vartrue($attributes['noedit']) && vartrue($parms['editable']) && !vartrue($parms['link'])) // avoid bad markup, better solution coming up
+				if(empty($attributes['noedit']) && !empty($parms['editable']) && empty($parms['link'])) // avoid bad markup, better solution coming up
 				{
-					$mode = preg_replace('/[^\w]/', '', vartrue($_GET['mode'], ''));
+					// $mode = preg_replace('/[^\w]/', '', vartrue($_GET['mode'], ''));
 
 					$uc_options = vartrue($parms['classlist'], 'public,guest,nobody,member,admin,main,classes'); // defaults to 'public,guest,nobody,member,classes' (userclass handler)
 					unset($parms['classlist']);
 
 					$array = e107::getUserClass()->uc_required_class_list($uc_options); //XXX Ugly looking (non-standard) function naming - TODO discuss name change.
-					$source = str_replace('"',"'",json_encode($array, JSON_FORCE_OBJECT));
-					
-					//NOTE Leading ',' required on $value; so it picks up existing value.
-					$value = "<a class='e-tip e-editable editable-click' data-placement='left' data-value='".$value."' data-name='".$field."' data-source=\"".$source."\" title=\"".LAN_EDIT." ".$attributes['title']."\" data-type='select' data-pk='".$id."' data-url='".e_SELF."?mode={$mode}&amp;action=inline&amp;id={$id}&amp;ajax_used=1' href='#'>".$dispvalue."</a>";
-					
+
+					$value = $this->renderInline($field, $id, $attributes['title'], $value, $dispvalue, 'select', $array, array('placement'=>'left'));
 				}
 				else 
 				{
@@ -5030,7 +5362,7 @@ class e_form
 					$source     = str_replace('"',"'",json_encode($array, JSON_FORCE_OBJECT));
 
 					//NOTE Leading ',' required on $value; so it picks up existing value.
-					$value = "<a class='e-tip e-editable editable-click' data-placement='bottom' data-value=',".$value."' data-name='".$field."' data-source=\"".$source."\" title=\"".LAN_EDIT." ".$attributes['title']."\" data-type='checklist' data-pk='".$id."' data-url='".e_SELF."?mode={$mode}&amp;action=inline&amp;id={$id}&amp;ajax_used=1' href='#'>".$dispvalue."</a>";
+					$value = "<a class='e-tip e-editable editable-click' data-placement='bottom' data-value=',".$value."' data-name='".$field."' data-source=\"".$source."\" title=\"".LAN_EDIT." ".$attributes['title']."\" data-type='checklist' data-pk='".$id."' data-token='".$this->inlineToken()."' data-url='".e_SELF."?mode={$mode}&amp;action=inline&amp;id={$id}&amp;ajax_used=1' href='#'>".$dispvalue."</a>";
 				}
 				else 
 				{
@@ -5117,7 +5449,7 @@ class e_form
 
 					$tpl = $this->userpicker($fieldID, array('user_id'=>$id, 'user_name'=>$ttl),  array('id' => $fieldID, 'inline' => $eEditableID));
 					$mode = preg_replace('/[^\w]/', '', vartrue($_GET['mode'], ''));
-					$value = "<a id='" . $eEditableID . "' class='e-tip e-editable editable-click editable-userpicker' data-clear='false' data-tpl='" . str_replace("'", '"', $tpl) . "' data-name='" . $field . "' title=\"" . LAN_EDIT . " " . $attributes['title'] . "\" data-type='text' data-pk='" . $row_id . "' data-value='" . $id . "' data-url='" . e_SELF . "?mode={$mode}&amp;action=inline&amp;id={$row_id}&amp;ajax_used=1' href='#'>" . $ttl . "</a>";
+					$value = "<a id='" . $eEditableID . "' class='e-tip e-editable editable-click editable-userpicker' data-clear='false' data-token='".$this->inlineToken()."' data-tpl='" . str_replace("'", '"', $tpl) . "' data-name='" . $field . "' title=\"" . LAN_EDIT . " " . $attributes['title'] . "\" data-type='text' data-pk='" . $row_id . "' data-value='" . $id . "' data-url='" . e_SELF . "?mode={$mode}&amp;action=inline&amp;id={$row_id}&amp;ajax_used=1' href='#'>" . $ttl . "</a>";
 				}
 				
 			break;
@@ -5585,6 +5917,8 @@ class e_form
 				$label = varset($parms['label'], 'LAN_EDIT');
 				$max = varset($parms['max'],5);
 
+				$ret .= "<div class='mediaselector-multi field-element-images'>";
+
 				for ($i=0; $i < $max; $i++)
 				{				
 					$k 		= $key.'['.$i.'][path]';
@@ -5592,7 +5926,27 @@ class e_form
 					
 					$ret .=  $this->imagepicker($k, $ival, defset($label, $label), $parms);		
 				}
-				
+
+				$ret .= "</div>";
+			break;
+
+			/** Generic Media Pick for combinations of images, audio, video, glyphs, files, etc. Field Type = json */
+			case 'media':
+
+				$max = varset($parms['max'],1);
+
+				$ret = "<div class='mediaselector-multi field-element-media'>";
+				for ($i=0; $i < $max; $i++)
+				{
+					$k 		= $key.'['.$i.'][path]';
+					$ival 	= $value[$i]['path'];
+
+					$ret .=  $this->mediapicker($k, $ival, $parms);
+				}
+
+				$ret .= "</div>";
+
+				return $ret;
 			break;
 			
 			case 'files':
@@ -5706,7 +6060,7 @@ class e_form
 				$location = vartrue($parms['plugin']) ? e_PLUGIN.$parms['plugin'].'/' : e_THEME;
 				$ilocation = vartrue($parms['location']);
 				$tmp = e107::getFile()->get_files($location.'templates/'.$ilocation, vartrue($parms['fmask'], '_template\.php$'), vartrue($parms['omit'], 'standard'), vartrue($parms['recurse_level'], 0));
-				foreach($tmp as $files)
+				foreach(self::sort_get_files_output($tmp) as $files)
 				{
 					$k = str_replace('_template.php', '', $files['fname']);
 					$templates[$k] = implode(' ', array_map('ucfirst', explode('_', $k))); //TODO add LANS?
@@ -5716,7 +6070,7 @@ class e_form
 				$where = vartrue($parms['area'], 'front');
 				$location = vartrue($parms['plugin']) ? $parms['plugin'].'/' : '';
 				$tmp = e107::getFile()->get_files(e107::getThemeInfo($where, 'rel').'templates/'.$location.$ilocation, vartrue($parms['fmask']), vartrue($parms['omit'], 'standard'), vartrue($parms['recurse_level'], 0));
-				foreach($tmp as $files)
+				foreach(self::sort_get_files_output($tmp) as $files)
 				{
 					$k = str_replace('_template.php', '', $files['fname']);
 					$templates[$k] = implode(' ', array_map('ucfirst', explode('_', $k))); //TODO add LANS?

@@ -19,7 +19,7 @@ var e107 = e107 || {'settings': {}, 'behaviors': {}};
 				{
 					var $this = $(this);
 
-					if($this.attr('data-cache') == 'false')
+					if($this.attr('data-cache') === 'false')
 					{
 						$('#uiModal').on('shown.bs.modal', function ()
 						{
@@ -30,6 +30,7 @@ var e107 = e107 || {'settings': {}, 'behaviors': {}};
 					var url = $this.attr('href');
 					var caption = $this.attr('data-modal-caption');
 					var height = ($(window).height() * 0.7) - 120;
+
 
 					if(caption === undefined)
 					{
@@ -43,7 +44,29 @@ var e107 = e107 || {'settings': {}, 'behaviors': {}};
 					$("#e-modal-iframe").on("load", function ()
 					{
 						$('#e-modal-loading').hide();
+
+						if($this.attr('data-modal-submit'))
+						{
+							var buttonCaption = $('#e-modal-iframe').contents().find('#etrigger-submit').text(); // copy submit button caption from iframe form.
+
+							var buttonClass = $('#e-modal-iframe').contents().find('#etrigger-submit').attr('data-modal-submit-class'); // co
+							if(buttonCaption)
+							{
+								$('#e-modal-submit').text(buttonCaption).fadeIn(); // display the button in the modal footer.
+							}
+
+							if(buttonClass)
+							{
+								$('#e-modal-submit').addClass(buttonClass);
+							}
+
+
+							$('#e-modal-iframe').contents().find('.buttons-bar').hide(); // hide buttons in the iframe's form.
+						}
+
 					});
+
+
 
 					return false;
 				});
@@ -138,6 +161,45 @@ var e107 = e107 || {'settings': {}, 'behaviors': {}};
 
 $(document).ready(function()
 {
+
+			$('#e-modal-submit').click(function () {
+			  $('#e-modal-iframe').contents().find('#etrigger-submit').trigger('click');
+
+			  	var type = $(this).data('loading-icon');
+			  	var orig = $(this).text();
+
+				var caption = "<i class='fa fa-spin " + type + " fa-fw'></i>";
+				caption += "<span>" + orig + "</span>";
+
+				$(this).html(caption);
+
+				  $('#e-modal-iframe').on('load', function(){
+
+				  	 var buttonFound = $('#e-modal-iframe').contents().find('#etrigger-submit');
+
+				  	if(buttonFound.length === 0) // disable resubmitting if not button found after submit.
+				  	{
+				  		$('#e-modal-submit').fadeOut(1000);
+				  	}
+
+				  	$('#e-modal-submit').text(orig); // remove spinner.
+
+				  });
+
+			});
+
+			$('[data-dismiss="modal"]').click(function(){ // hide button for next modal popup usage.
+
+				$('#e-modal-submit').hide(1000);
+
+			});
+
+
+
+
+
+
+
 		$('form').h5Validate(
 			{ errorClass: 'has-error' }
 		); // allow older browsers to use html5 validation. 
@@ -225,8 +287,14 @@ $(document).ready(function()
 		});
 
 
+
+
 	$('div.e-container').editable({
 		selector: '.e-editable',
+		params: function(params) {
+			params.token = $(this).attr('data-token');
+           return params;
+		},
 		display: function (value, sourceData)
 		{
 			// HTML entities decoding... fix for:
@@ -732,11 +800,28 @@ $(document).ready(function()
         });
 
 
-
-		$('.carousel').on('slid.bs.carousel', function () {
+		$('body').on('slid.bs.carousel', '.carousel', function(){
 		  var currentIndex = $(this).find('.active').index();
 		  var text = (currentIndex + 1);
-		  $('#admin-ui-carousel-index').text(text);
+		  var id = $(this).attr('id') + '-index'; // admin-ui-carousel-index etc.
+		  $('#'+id).text(text);
+
+			// this takes commented content for each carousel slide and enables it, one slide at a time as we scroll.
+
+			$(this).find('.item').each(function(index, node)
+			{
+				var content = $(this).contents();
+
+				var item = content[0];
+
+				if(item.nodeType === 8) // commented code @see e_media::browserCarousel() using '<!--'
+				{
+					$(item).replaceWith(item.nodeValue);
+					return false;
+				}
+
+			});
+
 		});
 		
 

@@ -161,22 +161,19 @@ class user_shortcodes extends e_shortcode
 	function sc_user_level($parm) 
 	{
 		$pref = e107::getPref();
-		//FIXME - new level handler, currently commented to avoid parse errors
-		//require_once(e_HANDLER."level_handler.php");
-		//$ldata = get_level($this->var['user_id'], $this->var['user_forums'], $this->var['user_comments'], $this->var['user_chats'], $this->var['user_visits'], $this->var['user_join'], $this->var['user_admin'], $this->var['user_perms'], $pref);
-		$ldata = array();
-		if (isset($ldata[0]) && strstr($ldata[0], "IMAGE_rank_main_admin_image"))
+
+		$ldata = e107::getRank()->getRanks($this->var['user_id']); //, (USER && $forum->isModerator(USERID)));
+		if(vartrue($ldata['special']))
 		{
-			return LAN_USER_31;
+			$r = $ldata['special'];
 		}
-		elseif(isset($ldata[0]) && strstr($ldata[0], "IMAGE"))
+		else
 		{
-			return LAN_USER_32;
+			$r = $ldata['pic'] ? $ldata['pic'] : varset($ldata['name'], $ldata['name']);
 		}
-		elseif(isset($ldata[1]))
-		{
-			return $ldata[1];
-		}
+		if(!$r) $r = 'n/a';
+		return $r;
+
 	}
 	
 	
@@ -265,23 +262,29 @@ class user_shortcodes extends e_shortcode
 
 
 	
-	function sc_user_email($parm='')
+function sc_user_email($parm='')
+{
+
+	$tp = e107::getParser();
+	
+	$aCurUserData = e107::user(USERID);
+
+	if( ($this->var['user_hideemail'] && !ADMIN ) && ( $this->var['user_email']!=$aCurUserData['user_email'] ) )
 	{
-
-		$tp = e107::getParser();
-
-		if($this->var['user_hideemail'] && !ADMIN)
-		{
-			return "<i>".LAN_USER_35."</i>";
-		}
-		else
-		{
+		return "<i>".LAN_USER_35."</i>";
+	}
+	else
+	{
+		if($this->var['user_email']!=$aCurUserData['user_email']){
 			return $tp->emailObfuscate($this->var['user_email']);
 			//list($user,$dom) = explode('@', $this->var['user_email']);
 			//return "<span class='e-email' data-user='".$user."' data-dom='".$dom."'>&#64;</span>";
+		}else{
+			return $this->var['user_email'];
 		}
-
 	}
+
+}
 
 
 	/**
@@ -521,21 +524,40 @@ class user_shortcodes extends e_shortcode
 	
 	function sc_user_update_link($parm) 
 	{
-		$url = e107::getUrl();
+		$label = null;
+
 		if (USERID == $this->var['user_id']) 
 		{
-			//return "<a href='".$url->create('user/myprofile/edit')."'>".LAN_USER_38."</a>";
-			return "<a class='btn btn-default' href='".e_HTTP."usersettings.php'>".LAN_USER_38."</a>"; // TODO: repair dirty fix for usersettings
+			$label = LAN_USER_38;
 		}
 		else if(ADMIN && getperms("4") && !$this->var['user_admin']) 
 		{
-			$editUrl =  e_ADMIN_ABS."users.php?mode=main&action=edit&id=".$this->var['user_id'];
-
-			return "<a class='btn btn-default' href='".$editUrl."'>".LAN_USER_39."</a>";
-
-			//	return "<a class='btn btn-default' href='".$url->create('user/profile/edit', array('id' => $this->var['user_id'], 'name' => $this->var['user_name']))."'>".LAN_USER_39."</a>";
+			$label = LAN_USER_39;
 		}
+
+		if(empty($label))
+		{
+			return null;
+		}
+
+		return "<a class='btn btn-default' href='".$this->sc_user_settings_url()."'>".$label."</a>";
+
 	}
+
+	function sc_user_settings_url($parm=null)
+	{
+
+		if (USERID == $this->var['user_id'])
+		{
+			return e107::getUrl()->create('user/myprofile/edit');
+		}
+		else if(ADMIN && getperms("4") && !$this->var['user_admin'])
+		{
+			return e_ADMIN_ABS."users.php?mode=main&action=edit&id=".$this->var['user_id'];
+		}
+
+	}
+
 	
 	
 	
@@ -759,13 +781,15 @@ class user_shortcodes extends e_shortcode
 	
 	function sc_profile_comments($parm) 
 	{
-		if(e107::getPref('profile_comments'))
+		if(!e107::getPref('profile_comments'))
 		{
-			$ret = e107::getComment()->compose_comment('profile', 'comment', $this->var['user_id'], null, $this->var['user_name'], FALSE,true);
-		
-		 	return e107::getRender()->tablerender($ret['caption'],$ret['comment_form']. $ret['comment'], 'profile_comments', TRUE);
+			return '';
 		}
-		return "";
+
+		return e107::getComment()->compose_comment('profile', 'comment', $this->var['user_id'], null, $this->var['user_name'], false,'html');
+
+	//	return e107::getRender()->tablerender($ret['caption'],$ret['comment_form']. $ret['comment'], 'profile_comments', TRUE);
+
 	}
 	
 	

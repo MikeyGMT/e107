@@ -46,9 +46,17 @@
 	$chunks = isset($_REQUEST["chunks"]) ? intval($_REQUEST["chunks"]) : 0;
 	$fileName = isset($_REQUEST["name"]) ? $_REQUEST["name"] : '';
 
-
 // Clean the fileName for security reasons
 	$fileName = preg_replace('/[^\w\._]+/', '_', $fileName);
+
+	if(!empty($_FILES['file']['name'])) // dropzone support v2.1.9
+	{
+		$fileName = $_FILES['file']['name'];
+	}
+
+//	$array = array("jsonrpc" => "2.0", "error" => array('code'=>$_FILES['file']['error'], 'message'=>'Failed to move file'), "id" => "id",  'data'=>$_FILES );
+
+
 
 // Make sure the fileName is unique but only if chunking is disabled
 	if($chunks < 2 && file_exists($targetDir . DIRECTORY_SEPARATOR . $fileName))
@@ -141,10 +149,28 @@
 				die('{"jsonrpc" : "2.0", "error" : {"code": 102, "message": "Failed to open output stream."}, "id" : "id"}');
 			}
 		}
-		else
+		else // Misc Error. 
 		{
-			die('{"jsonrpc" : "2.0", "error" : {"code": 103, "message": "Failed to move uploaded file."}, "id" : "id"}');
+			$phpFileUploadErrors = array(
+			    0 => 'There is no error, the file uploaded with success',
+			    1 => 'The uploaded file exceeds the upload_max_filesize directive in php.ini',
+			    2 => 'The uploaded file exceeds the MAX_FILE_SIZE directive that was specified in the HTML form',
+			    3 => 'The uploaded file was only partially uploaded',
+			    4 => 'No file was uploaded',
+			    6 => 'Missing a temporary folder',
+			    7 => 'Failed to write file to disk.',
+			    8 => 'A PHP extension stopped the file upload.',
+			);
+
+			$err = (int) $_FILES['file']['error'];
+
+			$array = array("jsonrpc" => "2.0", "error" => array('code'=>$err, 'message'=> $phpFileUploadErrors[$err]), "id" => "id",  'data'=>$_FILES );
+
+			echo json_encode($array);
+			exit;
 		}
+
+
 	}
 	else
 	{
@@ -185,6 +211,14 @@
 
 	$filePath = str_replace('//','/',$filePath); // cleanup .
 
+
+	if(e107::getFile()->isClean($filePath) !== true)
+	{
+		@unlink($filePath);
+		die('{"jsonrpc" : "2.0", "error" : {"code": 104, "message": "Bad File Detected."}, "id" : "id"}');
+	}
+
+
 	$convertToJpeg = e107::getPref('convert_to_jpeg', 0);
 	$fileSize = filesize($filePath);
 
@@ -199,10 +233,14 @@
 
 	}
 
-	if($_GET['for'] != '') // leave in upload directory if no category given.
+
+	if(!empty($_GET['for'])) // leave in upload directory if no category given.
 	{
 		$uploadPath = varset($_GET['path'],null);
-		$result = e107::getMedia()->importFile($fileName, $_GET['for'], array('path'=>$uploadPath));
+		$for = $tp->filter($_GET['for']);
+		$for = str_replace(array('+','^'),'', $for);
+
+		$result = e107::getMedia()->importFile($fileName, $for, array('path'=>$uploadPath));
 	}
 
 
@@ -211,6 +249,11 @@
 	$log['filename'] = $fileName;
 	$log['filesize'] = $fileSize;
 	$log['status'] = ($result) ? 'ok' : 'failed';
+	$log['_files'] = $_FILES;
+//	$log['_get'] = $_GET;
+//	$log['_post'] = $_POST;
+
+
 
 	
 
@@ -218,7 +261,9 @@
 
 	e107::getLog()->add('LAN_AL_MEDIA_01', print_r($log, true), $type, 'MEDIA_01');
 
-	$array = array("jsonrpc" => "2.0", "result" => $result, "id" => "id");
+
+	$preview = e107::getMedia()->previewTag($result);
+	$array = array("jsonrpc" => "2.0", "result" => $result, "id" => "id", 'preview' => $preview, 'data'=>$_FILES );
 
 	echo json_encode($array);
 // Return JSON-RPC response

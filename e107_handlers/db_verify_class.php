@@ -22,7 +22,7 @@ e107::includeLan(e_LANGUAGEDIR.e_LANGUAGE.'/admin/lan_db_verify.php');
 class db_verify
 {
 	var $backUrl       = "";
-	var $sqlFileTables = array();
+	public $sqlFileTables = array();
 	private $sqlDatabaseTables   = array();
 
 	var $sqlLanguageTables = array();
@@ -163,7 +163,7 @@ class db_verify
 	function verify()
 	{
 		
-		if(vartrue($_POST['verify_table']))
+		if(!empty($_POST['verify_table']))
 		{			
 			$this->runComparison($_POST['verify_table']);
 			
@@ -273,6 +273,8 @@ class db_verify
 
 		$this->currentTable = $selection;
 
+	//	var_dump($this->sqlFileTables[$selection]);
+
 		if(!isset($this->sqlFileTables[$selection])) // doesn't have an SQL file.
 		{
 		// e107::getMessage()->addDebug("No SQL File for ".$selection);
@@ -321,6 +323,8 @@ class db_verify
 			
 			$fileData['index']	= $this->getIndex($this->sqlFileTables[$selection]['data'][$key]);
 			$sqlData['index']	= $this->getIndex($sqlDataArr['data'][0]);
+
+
 		/*		
 			$debugA = print_r($fileFieldData,TRUE);	// Extracted Field Arrays	
 			$debugA .= "<h2>Index</h2>";
@@ -757,6 +761,7 @@ class db_verify
 							break;
 							
 							case 'index':
+								$newval = str_replace("PRIMARY", "PRIMARY KEY", $newval);
 								$query = "ALTER TABLE `".MPREFIX.$table."` ADD $newval ";
 							break;
 							
@@ -823,12 +828,12 @@ class db_verify
 	//	$regex = "/CREATE TABLE `?([\w]*)`?\s*?\(([\s\w\+\-_\(\),'\. `]*)\)\s*(ENGINE|TYPE)\s*?=\s?([\w]*)[\w =]*;/i";
 
 		$regex = "/CREATE TABLE (?:IF NOT EXISTS )?`?([\w]*)`?\s*?\(([\s\w\+\-_\(\),:'\. `]*)\)\s*(ENGINE|TYPE)\s*?=\s?([\w]*)[\w =]*;/i";
-	 			
-		$table = preg_match_all($regex,$sql_data,$match);
-		
 
+		// also support non-alphanumeric chars.
+	 	$regex = "/CREATE TABLE (?:IF NOT EXISTS )?`?([\w]*)`?\s*?\(([^;]*)\)\s*(ENGINE|TYPE)\s*?=\s?([\w]*)[\w =]*;/i";
 
-			
+		preg_match_all($regex,$sql_data,$match);
+
 		$tables = array();
 			
 		foreach($match[1] as $c=>$k)
@@ -843,7 +848,19 @@ class db_verify
 				
 				
 		$ret['tables'] = $tables;
-		$ret['data'] = $match[2];
+
+		$data = array();
+
+		if(!empty($match[2])) // clean/trim data.
+		{
+			foreach($match[2] as $dat)
+			{
+				$dat = str_replace("\t", '', $dat); // remove tab chars.
+				$data[] = trim($dat);
+			}
+		}
+
+		$ret['data'] = $data;
 		$ret['engine'] = $match[4];
 		
 		if(empty($ret['tables']))

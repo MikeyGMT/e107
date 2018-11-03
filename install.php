@@ -11,7 +11,7 @@
 */
 
 // minimal software version
-define('MIN_PHP_VERSION',   '5.4');
+define('MIN_PHP_VERSION',   '5.6');
 define('MIN_MYSQL_VERSION', '4.1.2');
 define('MAKE_INSTALL_LOG', true);
 
@@ -162,18 +162,6 @@ if($e107->initInstall($e107_paths, $ebase, $override)===false)
 }
 	
 unset($e107_paths,$override,$ebase);
-
-
-
-### NEW Register Autoload - do it asap
-if(!function_exists('spl_autoload_register'))
-{
-	// PHP >= 5.1.2 required
-	die_fatal_error('Fatal exception - spl_autoload_* required.');
-}
-
-// register core autoload
-e107::autoload_register(array('e107', 'autoload'));
 
 // NEW - session handler
 require_once(e_HANDLER.'session_handler.php');
@@ -886,7 +874,7 @@ class e_install
 
 		$extensionCheck = array(
 			'pdo'   => array('label'=> "PDO (MySQL)",       'status' => extension_loaded('pdo_mysql'),          'url'=> ''),
-			'xml'   => array('label'=> LANINS_050,          'status' => function_exists('utf8_encode'),         'url'=> 'http://php.net/manual/en/ref.xml.php'),
+			'xml'   => array('label'=> LANINS_050,          'status' => function_exists('utf8_encode') && class_exists('DOMDocument', false),  'url'=> 'http://php.net/manual/en/ref.xml.php'),
 			'exif'  => array('label'=> LANINS_048,          'status' => function_exists('exif_imagetype'),      'url'=> 'http://php.net/manual/en/book.exif.php'),
 			'curl'  => array('label'=> 'Curl Library',      'status' => function_exists('curl_version'),        'url'=> 'http://php.net/manual/en/book.curl.php'),
 			'gd'    => array('label'=> 'GD Library',        'status' => function_exists('gd_info'),             'url'=> 'http://php.net/manual/en/book.image.php'),

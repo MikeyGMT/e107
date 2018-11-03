@@ -115,6 +115,7 @@ define("LAN_FILES","Files");
 define("LAN_SIZE", "Size");
 define("LAN_VERSION", "Version");
 define("LAN_DOWNLOAD", "Download");
+define("LAN_DOWNLOAD_NO_PERMISSION", "File not found or you have no permission to download this file!");
 define("LAN_WEBSITE", "Website");
 define("LAN_COMMENTS", "Comments");
 define("LAN_LOCATION", "Location");
@@ -141,5 +142,4 @@ define("LAN_SUMMARY", "Summary");  // TODO   more files use summary replace
 define("LAN_REQUIRED_BLANK", "Required field(s) were left blank.");
 define("LAN_PLEASEWAIT", "Please Wait");
 define("LAN_CHOOSE_FILE", "Choose a file");
-
 ?>
